@@ -1,0 +1,25 @@
+# Slack Bolt framework and Flask adapter
+slack_bolt>=1.18.0
+flask>=3.0.0
+
+# LangChain core and integrations
+langchain>=0.2.0
+langchain-google-vertexai>=1.0.0
+langchain-community>=0.2.0
+
+# Vector store (CPU-only FAISS for Cloud Run compatibility)
+faiss-cpu>=1.8.0
+
+# Google Cloud libraries
+google-cloud-storage>=2.16.0
+google-cloud-aiplatform>=1.50.0
+
+# Document loaders
+beautifulsoup4>=4.12.0
+pypdf>=4.2.0
+
+# Web server (production WSGI)
+gunicorn>=22.0.0
+
+# HTTP utility used by WebBaseLoader
+requests>=2.31.0
