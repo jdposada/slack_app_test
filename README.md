@@ -1,197 +1,196 @@
-# Serverless Slack RAG App
+# OMOP 5.4 Slack App
 
-A production-ready Slack App powered by Retrieval-Augmented Generation (RAG), deployed on **Google Cloud Run**.
+This repo contains a Slack slash-command app that answers questions about OMOP CDM v5.4 from the official OHDSI CommonDataModel documentation set.
 
-## Architecture
+The runtime is intentionally simple:
+- A build step crawls the approved `ohdsi.github.io/CommonDataModel/` pages relevant to OMOP 5.4.
+- The crawler parses headings, narrative sections, and schema tables into structured chunks.
+- A packaged SQLite FTS5 index is built offline and shipped with the container image.
+- Slack commands retrieve the best matching chunks and send only that evidence to Vertex AI for synthesis.
 
-| Layer | Technology |
-|---|---|
-| Hosting | Google Cloud Run (serverless) |
-| Web framework | Python `flask` + `slack_bolt` (Flask adapter) |
-| LLM | Vertex AI `gemini-1.5-flash` |
-| Embeddings | Vertex AI `text-embedding-004` |
-| Vector store | FAISS (in-memory, index stored in GCS) |
-| Object storage | Google Cloud Storage |
+There is no vector database, no GCS-hosted index, and no backward-compatibility path to the old FAISS architecture.
 
----
+## Supported source set
 
-## Project Structure
+The index builder stays within `https://ohdsi.github.io/CommonDataModel/` and fetches the OMOP 5.4 doc set, including:
+- `cdm54.html`
+- `cdm54Changes.html`
+- `cdm54erd.html`
+- `cdm54ToolingSupport.html`
+- `dataModelConventions.html`
+- `cdmPrivacy.html`
+- `customConcepts.html`
+- `download.html`
+- `cdmRPackage.html`
+- `drug_dose.html`
+- `cdmDecisionTree.html`
+- `faq.html`
+- `sqlScripts.html`
+- `contribute.html`
 
+External pages such as forums, GitHub, Athena, demos, and Themis are excluded as answer sources.
+
+## Commands
+
+- `/omop54 <question>`: normal ephemeral answer with detailed citations
+- `/omop54-debug <question>`: ephemeral answer plus retrieval diagnostics when `ENABLE_DEBUG_COMMAND=true`
+
+Each answer includes a `Sources` section with page title, table name, field name when relevant, and a canonical URL.
+
+## Examples
+
+Normal command:
+
+```text
+/omop54 What is the PERSON table used for?
 ```
-slack_app_test/
-├── app.py            # Cloud Run web server (Slack Bolt + RAG)
-├── ingest.py         # Local data ingestion script
-├── requirements.txt  # Python dependencies
-├── Dockerfile        # Container image definition
-└── README.md
+
+Example answer:
+
+```text
+The PERSON table is the central identity table for people in the OMOP CDM and stores one record per person with demographic information.
+
+Sources:
+- OMOP CDM v5.4 | table PERSON | Table Description | https://ohdsi.github.io/CommonDataModel/cdm54.html#person
+- OMOP CDM v5.4 | table PERSON | User Guide | https://ohdsi.github.io/CommonDataModel/cdm54.html#person
 ```
 
----
+Field-level question:
 
-## Component 1 – Data Ingestion (`ingest.py`)
+```text
+/omop54 Is gender_concept_id required in PERSON?
+```
 
-Run this script **locally** (or in a CI job) whenever your documentation changes.
+Example answer:
 
-### What it does
-1. Loads documents from a public URL (`WebBaseLoader`) and/or a local PDF (`PyPDFLoader`).
-2. Splits text into overlapping chunks with `RecursiveCharacterTextSplitter`.
-3. Embeds chunks using Vertex AI `text-embedding-004`.
-4. Builds a FAISS vector store and saves `index.faiss` + `index.pkl` to disk.
-5. Uploads both files to a GCS bucket.
+```text
+Yes. In the PERSON table, `gender_concept_id` is required and is a foreign key to the CONCEPT table in the Gender domain.
 
-### Prerequisites
-* `gcloud auth application-default login` (or a service-account key).
-* Vertex AI API enabled in your GCP project.
-* A GCS bucket to store the index files.
+Sources:
+- OMOP CDM v5.4 | table PERSON | field gender_concept_id | Field Specification | https://ohdsi.github.io/CommonDataModel/cdm54.html#person
+```
 
-### Installation
+Change question:
+
+```text
+/omop54 What changed in VISIT_OCCURRENCE in OMOP 5.4?
+```
+
+Example answer:
+
+```text
+In OMOP 5.4, VISIT_OCCURRENCE renamed `admitting_source_concept_id` to `admitted_from_concept_id`, renamed `admitting_source_value` to `admitted_from_source_value`, and renamed the discharge fields to `discharged_to_*`.
+
+Sources:
+- Changes by Table | table VISIT_OCCURRENCE | Changes | https://ohdsi.github.io/CommonDataModel/cdm54Changes.html#visit_occurrence
+```
+
+Debug command:
+
+```text
+/omop54-debug Is gender_concept_id required?
+```
+
+Example debug response:
+
+```text
+Yes. The documentation marks `gender_concept_id` as required.
+
+Sources:
+- OMOP CDM v5.4 | table PERSON | field gender_concept_id | Field Specification | https://ohdsi.github.io/CommonDataModel/cdm54.html#person
+
+Debug diagnostics:
+- score=178.4; overlap=2; reason=exact field match, fts lexical match; source=https://ohdsi.github.io/CommonDataModel/cdm54.html#person
+  excerpt=CDM Field: gender_concept_id User Guide: This field is meant to capture the biological sex at birth of the Person. ...
+```
+
+## Environment variables
+
+Required:
+- `SLACK_BOT_TOKEN`
+- `SLACK_SIGNING_SECRET`
+- `GOOGLE_CLOUD_PROJECT`
+
+Optional:
+- `VERTEX_AI_LOCATION` default `us-central1`
+- `VERTEX_AI_MODEL` default `gemini-2.5-flash`
+- `OMOP_INDEX_PATH` default `data/omop54.db`
+- `ENABLE_DEBUG_COMMAND` default `false`
+- `TOP_K_DOCUMENTS` default `4`
+- `SOURCE_COUNT` default `3`
+- `PORT` default `8080`
+
+## Local development
+
+Install dependencies:
 
 ```bash
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
+pip install pytest
 ```
 
-### Usage
+Build the packaged OMOP index:
 
 ```bash
-# Minimal – URL only
-python ingest.py \
-  --url "https://en.wikipedia.org/wiki/Retrieval-augmented_generation" \
-  --project YOUR_GCP_PROJECT \
-  --bucket YOUR_GCS_BUCKET
-
-# URL + local PDF
-python ingest.py \
-  --url "https://docs.example.com/overview" \
-  --pdf  /path/to/internal_handbook.pdf \
-  --project YOUR_GCP_PROJECT \
-  --bucket YOUR_GCS_BUCKET
-
-# Skip GCS upload (build index locally only)
-python ingest.py \
-  --url "https://..." \
-  --project YOUR_GCP_PROJECT \
-  --skip-upload \
-  --output-dir ./my_index
+python ingest.py --output data/omop54.db
 ```
 
-All flags can also be set via environment variables:
-
-| Flag | Env var | Default |
-|---|---|---|
-| `--bucket` | `GCS_BUCKET_NAME` | _(required)_ |
-| `--project` | `GOOGLE_CLOUD_PROJECT` | _(required)_ |
-| `--prefix` | `GCS_INDEX_PREFIX` | `faiss_index` |
-
----
-
-## Component 2 – Slack App (`app.py`)
-
-### Guardrails
-
-| # | Name | Behaviour |
-|---|---|---|
-| 1 | Similarity threshold | If the best FAISS L2 distance > `SIMILARITY_THRESHOLD` (default `1.5`), the app replies with a hard-coded "off-topic" message and never calls Vertex AI. |
-| 2 | System prompt | The LLM is instructed to answer *only* from the provided context excerpts. |
-| 3 | Safety settings | All four Vertex AI `HarmCategory` settings are set to `BLOCK_MEDIUM_AND_ABOVE`. |
-
-### Environment Variables
-
-| Variable | Required | Description |
-|---|---|---|
-| `SLACK_BOT_TOKEN` | ✅ | `xoxb-…` bot token |
-| `SLACK_SIGNING_SECRET` | ✅ | Signing secret from Slack App settings |
-| `GCS_BUCKET_NAME` | ✅ | GCS bucket holding the FAISS index |
-| `GOOGLE_CLOUD_PROJECT` | ✅ | GCP project ID |
-| `GCS_INDEX_PREFIX` | | Path prefix in the bucket (default: `faiss_index`) |
-| `SIMILARITY_THRESHOLD` | | Max L2 distance for relevant hits (default: `1.5`) |
-| `TOP_K_DOCUMENTS` | | Chunks retrieved per query (default: `4`) |
-| `VERTEX_AI_LOCATION` | | Vertex AI region (default: `us-central1`) |
-| `PORT` | | Flask port (default: `8080`) |
-
-### Slack App Setup
-
-1. Go to <https://api.slack.com/apps> and create a new app.
-2. **OAuth & Permissions** → add `app_mentions:read`, `chat:write` scopes.
-3. **Event Subscriptions** → enable and set the Request URL to `https://<your-cloud-run-url>/slack/events`.
-4. Subscribe to the `app_mention` bot event.
-5. Install the app to your workspace and copy the **Bot User OAuth Token** and **Signing Secret**.
-
----
-
-## Component 3 – Deployment
-
-### Build & push the container
+Set runtime configuration:
 
 ```bash
-export PROJECT_ID=YOUR_GCP_PROJECT
-export REGION=us-central1
-export IMAGE="gcr.io/${PROJECT_ID}/slack-rag-app"
-
-# Build
-docker build -t "${IMAGE}" .
-
-# Push to Google Container Registry
-docker push "${IMAGE}"
-```
-
-### Deploy to Cloud Run
-
-```bash
-gcloud run deploy slack-rag-app \
-  --image        "gcr.io/${PROJECT_ID}/slack-rag-app" \
-  --platform     managed \
-  --region       "${REGION}" \
-  --allow-unauthenticated \
-  --port         8080 \
-  --cpu          1 \
-  --memory       2Gi \
-  --timeout      120 \
-  --min-instances 1 \
-  --set-env-vars "SLACK_BOT_TOKEN=xoxb-YOUR-TOKEN,\
-SLACK_SIGNING_SECRET=YOUR-SIGNING-SECRET,\
-GCS_BUCKET_NAME=YOUR-GCS-BUCKET,\
-GOOGLE_CLOUD_PROJECT=${PROJECT_ID}"
-```
-
-> **Tip:** For production deployments, store secrets in **Google Secret Manager** and reference them with `--set-secrets` instead of plain `--set-env-vars`.
-
-### Grant Cloud Run the necessary IAM permissions
-
-The Cloud Run service identity needs:
-
-```bash
-# Allow it to read from the GCS bucket
-gcloud storage buckets add-iam-policy-binding "gs://YOUR-GCS-BUCKET" \
-  --member "serviceAccount:YOUR-SA@${PROJECT_ID}.iam.gserviceaccount.com" \
-  --role "roles/storage.objectViewer"
-
-# Allow it to call Vertex AI
-gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
-  --member "serviceAccount:YOUR-SA@${PROJECT_ID}.iam.gserviceaccount.com" \
-  --role "roles/aiplatform.user"
-```
-
-### Health Check
-
-Cloud Run automatically probes `GET /health` which returns `{"status": "ok"}`.
-
----
-
-## Local Development
-
-```bash
-# Set required env vars
 export SLACK_BOT_TOKEN=xoxb-...
 export SLACK_SIGNING_SECRET=...
-export GCS_BUCKET_NAME=...
-export GOOGLE_CLOUD_PROJECT=...
+export GOOGLE_CLOUD_PROJECT=your-project
+export VERTEX_AI_MODEL=gemini-2.5-flash
+export OMOP_INDEX_PATH=data/omop54.db
+export ENABLE_DEBUG_COMMAND=true
+```
 
-# Run locally (downloads index from GCS on startup)
+Run locally:
+
+```bash
 python app.py
 ```
 
-Use [ngrok](https://ngrok.com/) to expose your local server to the Slack Events API during development:
+Expose the app to Slack during development:
 
 ```bash
 ngrok http 8080
+```
+
+Configure Slack slash commands to point at:
+- `/omop54` -> `https://<your-url>/slack/events`
+- `/omop54-debug` -> `https://<your-url>/slack/events`
+
+## Docker and Cloud Run
+
+The Docker build installs dependencies and runs the offline index build so the image already contains `/app/data/omop54.db`.
+
+Build:
+
+```bash
+docker build -t omop54-slack-app .
+```
+
+Deploy to Cloud Run:
+
+```bash
+gcloud run deploy omop54-slack-app \
+  --image gcr.io/YOUR_PROJECT/omop54-slack-app \
+  --platform managed \
+  --region us-central1 \
+  --allow-unauthenticated \
+  --set-env-vars "SLACK_BOT_TOKEN=xoxb-...,SLACK_SIGNING_SECRET=...,GOOGLE_CLOUD_PROJECT=YOUR_PROJECT,OMOP_INDEX_PATH=/app/data/omop54.db"
+```
+
+For production, use Secret Manager for Slack credentials.
+
+## Tests
+
+Run:
+
+```bash
+pytest
 ```
