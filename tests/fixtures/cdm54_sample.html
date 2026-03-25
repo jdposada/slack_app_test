@@ -1,0 +1,95 @@
+<html>
+  <body>
+    <h1><strong>OMOP CDM v5.4</strong></h1>
+    <div id="person" class="section level3">
+      <h3 class="tabset tabset-pills">person</h3>
+      <p>Table Description</p>
+      <p>
+        This table serves as the central identity management for all Persons in the database.
+      </p>
+      <p>User Guide</p>
+      <p>All records in this table are independent Persons.</p>
+      <p>ETL Conventions</p>
+      <p>All Persons in a database needs one record in this table.</p>
+      <table class="table table-condensed table-hover">
+        <thead>
+          <tr>
+            <th>CDM Field</th>
+            <th>User Guide</th>
+            <th>ETL Conventions</th>
+            <th>Datatype</th>
+            <th>Required</th>
+            <th>Primary Key</th>
+            <th>Foreign Key</th>
+            <th>FK Table</th>
+            <th>FK Domain</th>
+          </tr>
+        </thead>
+        <tr>
+          <td>person_id</td>
+          <td>Unique identifier for the person.</td>
+          <td>Assign a unique person_id.</td>
+          <td>integer</td>
+          <td>Yes</td>
+          <td>Yes</td>
+          <td>No</td>
+          <td></td>
+          <td></td>
+        </tr>
+        <tr>
+          <td>gender_concept_id</td>
+          <td>This field is meant to capture the biological sex at birth of the Person.</td>
+          <td>Use the gender or sex value present in the data.</td>
+          <td>integer</td>
+          <td>Yes</td>
+          <td>No</td>
+          <td>Yes</td>
+          <td>CONCEPT</td>
+          <td>Gender</td>
+        </tr>
+      </table>
+    </div>
+    <div id="provider" class="section level3">
+      <h3 class="tabset tabset-pills">provider</h3>
+      <p>Table Description</p>
+      <p>This table contains details about healthcare providers.</p>
+      <table class="table table-condensed table-hover">
+        <thead>
+          <tr>
+            <th>CDM Field</th>
+            <th>User Guide</th>
+            <th>ETL Conventions</th>
+            <th>Datatype</th>
+            <th>Required</th>
+            <th>Primary Key</th>
+            <th>Foreign Key</th>
+            <th>FK Table</th>
+            <th>FK Domain</th>
+          </tr>
+        </thead>
+        <tr>
+          <td>provider_id</td>
+          <td>Unique identifier for the provider.</td>
+          <td>Assign a unique provider_id.</td>
+          <td>integer</td>
+          <td>Yes</td>
+          <td>Yes</td>
+          <td>No</td>
+          <td></td>
+          <td></td>
+        </tr>
+        <tr>
+          <td>gender_concept_id</td>
+          <td>This field captures the provider gender when available.</td>
+          <td>Map the source gender value when present.</td>
+          <td>integer</td>
+          <td>No</td>
+          <td>No</td>
+          <td>Yes</td>
+          <td>CONCEPT</td>
+          <td>Gender</td>
+        </tr>
+      </table>
+    </div>
+  </body>
+</html>

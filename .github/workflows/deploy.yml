@@ -1,0 +1,107 @@
+name: CI and Deploy
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest
+
+      - name: Run tests
+        run: python -m pytest -q
+
+  deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      GCP_PROJECT_ID: form-inspector
+      GCP_REGION: us-central1
+      SERVICE_NAME: omop54-slack-app
+      ARTIFACT_REPOSITORY: omop54-slack-app
+      IMAGE_NAME: app
+      RUNTIME_SERVICE_ACCOUNT: omop54-run@form-inspector.iam.gserviceaccount.com
+      VERTEX_AI_LOCATION: us-central1
+      VERTEX_AI_MODEL: gemini-2.5-flash
+      OMOP_INDEX_PATH: /app/data/omop54.db
+      ENABLE_DEBUG_COMMAND: "true"
+      TOP_K_DOCUMENTS: "4"
+      SOURCE_COUNT: "3"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOY_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker "${GCP_REGION}-docker.pkg.dev" --quiet
+
+      - name: Build container image
+        env:
+          IMAGE_URI: ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.ARTIFACT_REPOSITORY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+        run: docker build --tag "${IMAGE_URI}" .
+
+      - name: Push container image
+        env:
+          IMAGE_URI: ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.ARTIFACT_REPOSITORY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+        run: docker push "${IMAGE_URI}"
+
+      - name: Deploy to Cloud Run
+        id: deploy
+        uses: google-github-actions/deploy-cloudrun@v3
+        with:
+          project_id: ${{ env.GCP_PROJECT_ID }}
+          region: ${{ env.GCP_REGION }}
+          service: ${{ env.SERVICE_NAME }}
+          image: ${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.ARTIFACT_REPOSITORY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          env_vars: |-
+            GOOGLE_CLOUD_PROJECT=${{ env.GCP_PROJECT_ID }}
+            VERTEX_AI_LOCATION=${{ env.VERTEX_AI_LOCATION }}
+            VERTEX_AI_MODEL=${{ env.VERTEX_AI_MODEL }}
+            OMOP_INDEX_PATH=${{ env.OMOP_INDEX_PATH }}
+            ENABLE_DEBUG_COMMAND=${{ env.ENABLE_DEBUG_COMMAND }}
+            TOP_K_DOCUMENTS=${{ env.TOP_K_DOCUMENTS }}
+            SOURCE_COUNT=${{ env.SOURCE_COUNT }}
+          secrets: |-
+            SLACK_SIGNING_SECRET=omop54-slack-signing-secret:latest
+          flags: >-
+            --service-account=${{ env.RUNTIME_SERVICE_ACCOUNT }}
+            --min-instances=1
+
+      - name: Show deployed URL
+        run: echo "Deployed to ${{ steps.deploy.outputs.url }}"

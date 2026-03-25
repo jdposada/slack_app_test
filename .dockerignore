@@ -1,0 +1,11 @@
+.git
+.gcloudignore
+.venv
+__pycache__
+tests
+*.pyc
+*.pyo
+*.pyd
+*.db
+data
+.DS_Store

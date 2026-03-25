@@ -1,0 +1,6 @@
+beautifulsoup4>=4.12.0
+flask>=3.0.0
+google-cloud-aiplatform>=1.50.0
+gunicorn>=22.0.0
+requests>=2.31.0
+slack_bolt>=1.18.0
