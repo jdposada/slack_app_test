@@ -107,7 +107,6 @@ Debug diagnostics:
 ## Environment variables
 
 Required:
-- `SLACK_BOT_TOKEN`
 - `SLACK_SIGNING_SECRET`
 - `GOOGLE_CLOUD_PROJECT`
 
@@ -140,7 +139,6 @@ python ingest.py --output data/omop54.db
 Set runtime configuration:
 
 ```bash
-export SLACK_BOT_TOKEN=xoxb-...
 export SLACK_SIGNING_SECRET=...
 export GOOGLE_CLOUD_PROJECT=your-project
 export VERTEX_AI_MODEL=gemini-2.5-flash
@@ -183,10 +181,44 @@ gcloud run deploy omop54-slack-app \
   --region us-central1 \
   --allow-unauthenticated \
   --set-env-vars "GOOGLE_CLOUD_PROJECT=YOUR_PROJECT,OMOP_INDEX_PATH=/app/data/omop54.db" \
-  --update-secrets "SLACK_BOT_TOKEN=slack-bot-token:latest,SLACK_SIGNING_SECRET=slack-signing-secret:latest"
+  --update-secrets "SLACK_SIGNING_SECRET=slack-signing-secret:latest"
 ```
 
 For production, use Secret Manager for Slack credentials.
+
+## GitHub Actions deployment
+
+The repo includes [.github/workflows/deploy.yml](/Users/alvaro1/Documents/Coral/Code/ChatOmop/.github/workflows/deploy.yml).
+
+Behavior:
+- Pull requests to `main` run the test suite.
+- Pushes to `main` run the test suite, build the container image, push it to Artifact Registry, and deploy the Cloud Run service.
+
+The workflow is currently wired for this deployment target:
+- GCP project: `form-inspector`
+- Artifact Registry repo: `omop54-slack-app`
+- Cloud Run service: `omop54-slack-app`
+- Runtime service account: `omop54-run@form-inspector.iam.gserviceaccount.com`
+
+Before it can deploy from GitHub, configure these GitHub repository secrets:
+- `GCP_WORKLOAD_IDENTITY_PROVIDER`
+- `GCP_DEPLOY_SERVICE_ACCOUNT`
+
+Recommended values:
+- `GCP_WORKLOAD_IDENTITY_PROVIDER`: full Workload Identity Provider resource name, for example `projects/123456789/locations/global/workloadIdentityPools/github/providers/github`
+- `GCP_DEPLOY_SERVICE_ACCOUNT`: deployer service account email, for example `github-actions-deployer@form-inspector.iam.gserviceaccount.com`
+
+Recommended deployer service account roles:
+- `roles/run.admin`
+- `roles/artifactregistry.writer`
+- `roles/iam.serviceAccountUser` on `omop54-run@form-inspector.iam.gserviceaccount.com`
+- `roles/secretmanager.secretAccessor`
+
+The workflow deploys the same runtime configuration used in production, including:
+- Vertex AI model and region
+- packaged OMOP SQLite index path
+- Secret Manager reference for `SLACK_SIGNING_SECRET`
+- `--min-instances=1` to reduce Slack cold-start timeouts
 
 ## Tests
 
