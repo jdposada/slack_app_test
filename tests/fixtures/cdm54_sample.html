@@ -49,5 +49,47 @@
         </tr>
       </table>
     </div>
+    <div id="provider" class="section level3">
+      <h3 class="tabset tabset-pills">provider</h3>
+      <p>Table Description</p>
+      <p>This table contains details about healthcare providers.</p>
+      <table class="table table-condensed table-hover">
+        <thead>
+          <tr>
+            <th>CDM Field</th>
+            <th>User Guide</th>
+            <th>ETL Conventions</th>
+            <th>Datatype</th>
+            <th>Required</th>
+            <th>Primary Key</th>
+            <th>Foreign Key</th>
+            <th>FK Table</th>
+            <th>FK Domain</th>
+          </tr>
+        </thead>
+        <tr>
+          <td>provider_id</td>
+          <td>Unique identifier for the provider.</td>
+          <td>Assign a unique provider_id.</td>
+          <td>integer</td>
+          <td>Yes</td>
+          <td>Yes</td>
+          <td>No</td>
+          <td></td>
+          <td></td>
+        </tr>
+        <tr>
+          <td>gender_concept_id</td>
+          <td>This field captures the provider gender when available.</td>
+          <td>Map the source gender value when present.</td>
+          <td>integer</td>
+          <td>No</td>
+          <td>No</td>
+          <td>Yes</td>
+          <td>CONCEPT</td>
+          <td>Gender</td>
+        </tr>
+      </table>
+    </div>
   </body>
 </html>

@@ -6,7 +6,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir -r requirements.txt
 
-COPY app.py ingest.py omop_index.py ./
+COPY app.py ingest.py omop_index.py wsgi.py ./
 RUN mkdir -p /app/data \
     && python ingest.py --output /app/data/omop54.db
 
@@ -24,4 +24,4 @@ CMD ["gunicorn", \
      "--bind", "0.0.0.0:8080", \
      "--timeout", "120", \
      "--access-logfile", "-", \
-     "app:flask_app"]
+     "wsgi:flask_app"]

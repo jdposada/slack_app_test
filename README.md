@@ -182,7 +182,8 @@ gcloud run deploy omop54-slack-app \
   --platform managed \
   --region us-central1 \
   --allow-unauthenticated \
-  --set-env-vars "SLACK_BOT_TOKEN=xoxb-...,SLACK_SIGNING_SECRET=...,GOOGLE_CLOUD_PROJECT=YOUR_PROJECT,OMOP_INDEX_PATH=/app/data/omop54.db"
+  --set-env-vars "GOOGLE_CLOUD_PROJECT=YOUR_PROJECT,OMOP_INDEX_PATH=/app/data/omop54.db" \
+  --update-secrets "SLACK_BOT_TOKEN=slack-bot-token:latest,SLACK_SIGNING_SECRET=slack-signing-secret:latest"
 ```
 
 For production, use Secret Manager for Slack credentials.

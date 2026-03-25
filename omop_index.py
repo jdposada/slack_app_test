@@ -168,6 +168,9 @@ def discover_urls(session: requests.Session) -> list[str]:
         if is_allowed_url(candidate):
             urls.add(candidate)
 
+    for page_name in ALLOWED_PAGE_NAMES:
+        urls.add(urljoin(BASE_URL, page_name))
+
     return sorted(urls)
 
 
@@ -582,7 +585,7 @@ def build_database(chunks: Iterable[Chunk], output_path: str) -> None:
     try:
         connection.executescript(
             """
-            PRAGMA journal_mode=WAL;
+            PRAGMA journal_mode=DELETE;
 
             CREATE TABLE chunks (
                 chunk_id TEXT PRIMARY KEY,
@@ -677,8 +680,14 @@ def build_database(chunks: Iterable[Chunk], output_path: str) -> None:
 
 class OmopIndex:
     def __init__(self, db_path: str):
-        self._connection = sqlite3.connect(db_path, check_same_thread=False)
+        database_uri = f"file:{Path(db_path).as_posix()}?mode=ro&immutable=1"
+        self._connection = sqlite3.connect(
+            database_uri,
+            uri=True,
+            check_same_thread=False,
+        )
         self._connection.row_factory = sqlite3.Row
+        self._connection.execute("PRAGMA query_only = ON")
 
     def close(self) -> None:
         self._connection.close()
